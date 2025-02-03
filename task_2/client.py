@@ -1,57 +1,48 @@
 import socket
 import json
 
-class SocketClient:
-    def __init__(self, client_id, server_host="localhost", server_port=12345):
-        self.client_id = client_id
-        self.server_host = server_host
-        self.server_port = server_port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    def connect_to_server(self):
-        self.sock.connect((self.server_host, self.server_port))
-        print(f"Client {self.client_id} connected to {self.server_host}:{self.server_port}")
+def start_client():
+    # Get the client ID and server IP address from the user.
+    client_id = input("Enter Client ID (e.g., 1 or 2): ").strip()
+    server_ip = input("Enter the server IP address: ").strip()
 
-    def exchange_messages(self):
-        try:
-            # Receive the welcome message from the server
-            welcome = self.sock.recv(1024).decode()
-            print("Server:", welcome)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((server_ip, 12345))
+        print(f"Connected to server at {server_ip}:12345")
 
-            # For Client 2, prompt the user for device states; otherwise, send a simple message.
-            if self.client_id == 2:
-                light_state = input("Enter light state (on/off): ").strip().lower()
-                door_state = input("Enter door state (open/closed): ").strip().lower()
-                window_state = input("Enter window state (open/closed): ").strip().lower()
-                update_data = {"light": light_state, "door": door_state, "window": window_state}
-                message = json.dumps(update_data)
-            else:
-                message = f"Hello from Client {self.client_id}"
-            
-            self.sock.sendall(message.encode())
+        # Send the client ID to the server.
+        sock.sendall(client_id.encode())
 
-            # Receive the server's response
-            response = self.sock.recv(1024).decode()
-            print("Server:", response)
+        # Receive and display the welcome message.
+        welcome = sock.recv(1024).decode()
+        print("Server:", welcome)
 
-            final_msg = self.sock.recv(1024).decode()
-            print("Server:", final_msg)
-        except Exception as e:
-            print("Error:", e)
-        finally:
-            self.sock.close()
-            print(f"Client {self.client_id} disconnected.")
+        # If the client is '2', prompt the user for device states.
+        if client_id == "2":
+            light_state = input("Enter light state (on/off): ").strip().lower()
+            door_state = input("Enter door state (open/closed):").strip().lower()
+            window_state = input("Enter window state (open/closed): ").strip().lower()
+            update_data = {"light": light_state, "door": door_state, "window": window_state}
+            message = json.dumps(update_data)
+        else:
+            message = f"Hello from Client {client_id}"
+        sock.sendall(message.encode())
 
-    def run(self):
-        self.connect_to_server()
-        self.exchange_messages()
+        # Receive and display the server's response.
+        response = sock.recv(1024).decode()
+        print("Server:", response)
+
+        # Receive and display the goodbye message.
+        goodbye = sock.recv(1024).decode()
+        print("Server:", goodbye)
+    except Exception as e:
+        print("Error:", e)
+    finally:
+        sock.close()
+        print("Disconnected from server.")
+
 
 if __name__ == "__main__":
-    try:
-        client_number = int(input("Enter Client ID (e.g., 1 or 2): "))
-    except ValueError:
-        print("Invalid input. Please enter a numeric Client ID.")
-        exit(1)
-        
-    client = SocketClient(client_id=client_number)
-    client.run()
+    start_client()
