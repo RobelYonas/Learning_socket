@@ -3,137 +3,93 @@ import threading
 import json
 import tkinter as tk
 
-# Server configuration
-HOST = '127.0.0.1'
-PORT = 5060
-clients = {}  # Stores connected clients
-json_filename = "House.json"
+class HouseServer:
+    def __init__(self, host="0.0.0.0", port=12345):
+        self.host = host
+        self.port = port
+        
+        # Create and bind the server socket
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.bind((self.host, self.port))
+        self.server_socket.listen(5)
+        print(f"[INFO] Server listening on {self.host}:{self.port}")
+        
+        # Set up the Tkinter GUI for graphical representation
+        self.root = tk.Tk()
+        self.root.title("House State")
+        self.canvas = tk.Canvas(self.root, width=400, height=400)
+        self.canvas.pack()
+        
+        # Draw graphical objects for the house devices
+        self.light = self.canvas.create_oval(50, 50, 150, 150, fill="yellow")   # Circle for light
+        self.door = self.canvas.create_polygon(200, 200, 250, 300, 150, 300, fill="green")  # Triangle for door
+        self.window = self.canvas.create_rectangle(300, 50, 350, 100, fill="blue")   # Square for window
 
-# Create JSON file with initial state
-def create_json_file():
-    initial_data = {
-        "light": "on",
-        "door": "open",
-        "window": "open"
-    }
-    with open(json_filename, "w") as f:
-        json.dump(initial_data, f)
+    def update_graphics(self, data):
+        # Update light color: yellow for "on", gray for "off"
+        if data.get("light", "").lower() == "on":
+            self.canvas.itemconfig(self.light, fill="yellow")
+        else:
+            self.canvas.itemconfig(self.light, fill="gray")
 
-# Load JSON state
-def load_json():
-    with open(json_filename, "r") as f:
-        return json.load(f)
+        # Update door color: green for "open", red for "closed"
+        if data.get("door", "").lower() == "open":
+            self.canvas.itemconfig(self.door, fill="green")
+        else:
+            self.canvas.itemconfig(self.door, fill="red")
 
-# Update the JSON file and refresh the GUI
-def update_json(key, value):
-    house_state = load_json()
-    
-    if key in house_state:
-        house_state[key] = value  # Update specific key
-        with open(json_filename, "w") as f:
-            json.dump(house_state, f)
-        refresh_gui(house_state)
-    else:
-        print(f"Invalid update request: {key} is not a valid field")
+        # Update window color: blue for "open", black for "closed"
+        if data.get("window", "").lower() == "open":
+            self.canvas.itemconfig(self.window, fill="blue")
+        else:
+            self.canvas.itemconfig(self.window, fill="black")
 
-# Function to refresh the graphical interface
-def refresh_gui(state):
-    canvas.itemconfig(light_circle, fill="yellow" if state["light"] == "on" else "gray")
-    canvas.itemconfig(door_triangle, fill="green" if state["door"] == "open" else "red")
-    canvas.itemconfig(window_square, fill="blue" if state["window"] == "open" else "white")
-
-# Function to handle each client
-def handle_client(client_socket, client_address):
-    print(f"Client connected: {client_address}")
-
-    try:
-        client_socket.send(b"What is your name?")
-        name = client_socket.recv(1024).decode().strip()
-
-        if not name:
-            name = f"Guest{len(clients) + 1}"
-        clients[name] = client_socket
-
-        welcome_msg = f"Welcome {name}!"
-        client_socket.send(welcome_msg.encode())
-
+    def handle_client(self, client_socket, client_address):
+        print(f"[INFO] Connection established with {client_address}")
         while True:
-            msg = client_socket.recv(1024).decode().strip()
-            if not msg or msg.lower() == "exit":
+            try:
+                # Receive data from the client
+                client_message = client_socket.recv(1024).decode()
+                if not client_message:
+                    break  # No data, exit the loop
+
+                print(f"[DEBUG] Received from {client_address}: {client_message}")
+                
+                # If the message looks like JSON, parse and process it
+                if client_message.strip().startswith("{") and client_message.strip().endswith("}"):
+                    update_data = json.loads(client_message)
+                    
+                    # Update the JSON file with new house state
+                    with open("House.json", "w") as json_file:
+                        json.dump(update_data, json_file, indent=4)
+                    print(f"[INFO] Updated House.json with: {update_data}")
+
+                    # Tkinter should be updated from the main thread
+                    self.root.after(0, self.update_graphics, update_data)
+
+                # Send an acknowledgment back to the client
+                client_socket.sendall(b"Update received and applied!")
+            except Exception as e:
+                print(f"[ERROR] Error handling client {client_address}: {e}")
                 break
 
-            print(f"{name} says: {msg}")
+        client_socket.close()
+        print(f"[INFO] Connection with {client_address} closed.")
 
-            # Parse update commands (e.g., "update light off")
-            if msg.startswith("update"):
-                parts = msg.split()
-                if len(parts) == 3:
-                    _, key, value = parts
-                    update_json(key, value)
-                    client_socket.send(f"{key} updated to {value}".encode())
-                else:
-                    client_socket.send(b"Invalid update command. Use: update <key> <value>")
-            else:
-                broadcast(f"{name}: {msg}", sender_name=name)
-
-    except Exception as e:
-        print(f"Error with {name}: {e}")
-
-    print(f"{name} has disconnected.")
-    del clients[name]
-    client_socket.close()
-    broadcast(f"{name} has left the chat.")
-
-# Function to broadcast messages to all clients
-def broadcast(message, sender_name=None):
-    for client_name, client_socket in clients.items():
-        if client_name != sender_name:
-            try:
-                client_socket.send(message.encode())
-            except:
-                client_socket.close()
-                del clients[client_name]
-
-# GUI Initialization
-def setup_gui():
-    global canvas, light_circle, door_triangle, window_square
-
-    root = tk.Tk()
-    root.title("House State Visualization")
-
-    canvas = tk.Canvas(root, width=300, height=300)
-    canvas.pack()
-
-    # Light (Circle)
-    light_circle = canvas.create_oval(50, 50, 100, 100, fill="yellow")
-
-    # Door (Triangle)
-    door_triangle = canvas.create_polygon(150, 200, 130, 250, 170, 250, fill="green")
-
-    # Window (Square)
-    window_square = canvas.create_rectangle(200, 50, 250, 100, fill="blue")
-
-    # Load initial state
-    refresh_gui(load_json())
-
-    threading.Thread(target=main, daemon=True).start()
-    root.mainloop()
-
-# Main server function
-def main():
-    create_json_file()  # Ensure JSON file exists
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((HOST, PORT))
-    server_socket.listen(5)
-    print(f"Server listening on {HOST}:{PORT}")
-
-    try:
+    def accept_clients(self):
         while True:
-            client_socket, client_address = server_socket.accept()
-            client_thread = threading.Thread(target=handle_client, args=(client_socket, client_address))
+            client_socket, client_address = self.server_socket.accept()
+            client_thread = threading.Thread(
+                target=self.handle_client, args=(client_socket, client_address)
+            )
             client_thread.start()
-    except KeyboardInterrupt:
-        print("\nServer shutting down...")
-        server_socket.close()
 
-setup_gui()
+    def start(self):
+        # Start the client-accepting thread as a daemon
+        threading.Thread(target=self.accept_clients, daemon=True).start()
+        print("[INFO] Server thread started. Launching GUI.")
+        self.root.mainloop()
+
+if __name__ == "__main__":
+    server = HouseServer()
+    server.start()

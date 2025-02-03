@@ -1,39 +1,53 @@
 import socket
-import threading
+import json
 
-HOST = '127.0.0.1'
-PORT = 5060
+class HouseClient:
+    def __init__(self, server_ip, server_port=12345):
+        self.server_ip = server_ip
+        self.server_port = server_port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-def receive_messages(client_socket):
-    """Function to continuously receive messages from the server."""
-    while True:
+    def connect(self):
         try:
-            message = client_socket.recv(1024).decode()
-            if not message:
-                break
-            print(message)
-        except:
-            break
+            self.sock.connect((self.server_ip, self.server_port))
+            print(f"[INFO] Connected to server at {self.server_ip}:{self.server_port}")
+        except Exception as e:
+            print(f"[ERROR] Could not connect to server: {e}")
+            exit(1)
 
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client_socket.connect((HOST, PORT))
+    def send_update(self):
+        try:
+            # Prompt the user for input on the house state
+            light_state = input("Enter light state (on/off): ").strip().lower()
+            door_state = input("Enter door state (open/closed): ").strip().lower()
+            window_state = input("Enter window state (open/closed): ").strip().lower()
 
-# Receive the name prompt and send name
-print(client_socket.recv(1024).decode())
-name = input("Enter your name: ").strip()
-client_socket.send(name.encode())
+            # Build a dictionary and convert it to a JSON string
+            update_data = {
+                "light": light_state,
+                "door": door_state,
+                "window": window_state
+            }
+            update_message = json.dumps(update_data)
+            print(f"[INFO] Sending JSON update to server: {update_message}")
 
-# Receive welcome message
-print(client_socket.recv(1024).decode())
+            # Send the JSON update to the server
+            self.sock.sendall(update_message.encode())
 
-# Start thread to receive messages
-threading.Thread(target=receive_messages, args=(client_socket,), daemon=True).start()
+            # Wait for the server's acknowledgment
+            response = self.sock.recv(1024).decode()
+            print(f"[INFO] Server response: {response}")
+        except Exception as e:
+            print(f"[ERROR] Error during communication: {e}")
+        finally:
+            self.sock.close()
 
-while True:
-    msg = input()
-    if msg.lower() == "exit":
-        client_socket.send(msg.encode())
-        break
-    client_socket.send(msg.encode())
+    def run(self):
+        self.connect()
+        self.send_update()
 
-client_socket.close()
+if __name__ == "__main__":
+    # Prompt for the server's IP address (allowing remote connection)
+    server_ip = input("Enter the server IP address: ").strip()
+    client = HouseClient(server_ip)
+    client.run()
