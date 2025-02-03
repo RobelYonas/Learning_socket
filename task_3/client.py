@@ -1,53 +1,49 @@
 import socket
 import json
 
-class HouseClient:
-    def __init__(self, server_ip, server_port=12345):
-        self.server_ip = server_ip
-        self.server_port = server_port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    def connect(self):
-        try:
-            self.sock.connect((self.server_ip, self.server_port))
-            print(f"[INFO] Connected to server at {self.server_ip}:{self.server_port}")
-        except Exception as e:
-            print(f"[ERROR] Could not connect to server: {e}")
-            exit(1)
+def start_client():
+    # Get client ID and server IP address from the user.
+    client_id = input("Enter Client ID (e.g., 1 or 2): ").strip()
+    server_ip = input("Enter the server IP address: ").strip()
 
-    def send_update(self):
-        try:
-            # Prompt the user for input on the house state
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((server_ip, 12345))
+        print(f"Connected to server at {server_ip}:12345")
+
+        # Send the client ID to the server.
+        sock.sendall(client_id.encode())
+
+        # Receive and display the welcome message.
+        welcome = sock.recv(1024).decode()
+        print("Server:", welcome)
+
+        # If the client is '2', prompt the user for device states.
+        if client_id == "2":
             light_state = input("Enter light state (on/off): ").strip().lower()
             door_state = input("Enter door state (open/closed): ").strip().lower()
             window_state = input("Enter window state (open/closed): ").strip().lower()
+            update_data = {"light": light_state, "door": door_state, "window": window_state}
+            message = json.dumps(update_data)
+        else:
+            message = f"Hello from Client {client_id}"
 
-            # Build a dictionary and convert it to a JSON string
-            update_data = {
-                "light": light_state,
-                "door": door_state,
-                "window": window_state
-            }
-            update_message = json.dumps(update_data)
-            print(f"[INFO] Sending JSON update to server: {update_message}")
+        sock.sendall(message.encode())
 
-            # Send the JSON update to the server
-            self.sock.sendall(update_message.encode())
+        # Receive and display the server's response.
+        response = sock.recv(1024).decode()
+        print("Server:", response)
 
-            # Wait for the server's acknowledgment
-            response = self.sock.recv(1024).decode()
-            print(f"[INFO] Server response: {response}")
-        except Exception as e:
-            print(f"[ERROR] Error during communication: {e}")
-        finally:
-            self.sock.close()
+        # Receive and display the goodbye message.
+        goodbye = sock.recv(1024).decode()
+        print("Server:", goodbye)
+    except Exception as e:
+        print("Error:", e)
+    finally:
+        sock.close()
+        print("Disconnected from server.")
 
-    def run(self):
-        self.connect()
-        self.send_update()
 
 if __name__ == "__main__":
-    # Prompt for the server's IP address (allowing remote connection)
-    server_ip = input("Enter the server IP address: ").strip()
-    client = HouseClient(server_ip)
-    client.run()
+    start_client()
