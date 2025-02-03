@@ -4,9 +4,8 @@ import threading
 HOST = '127.0.0.1'
 PORT = 5060
 
-
 def receive_messages(client_socket):
-    """Function to receive messages from the server continuously."""
+    """Function to continuously receive messages from the server."""
     while True:
         try:
             message = client_socket.recv(1024).decode()
@@ -16,11 +15,10 @@ def receive_messages(client_socket):
         except:
             break
 
-
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.connect((HOST, PORT))
 
-# Receive name prompt and send name
+# Receive the name prompt and send name
 print(client_socket.recv(1024).decode())
 name = input("Enter your name: ").strip()
 client_socket.send(name.encode())
